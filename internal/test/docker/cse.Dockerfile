@@ -29,8 +29,6 @@ RUN cd /root && bash ./install-libmongocrypt.sh
 COPY . /mongo-go-driver
 RUN rm -rf /mongo-go-driver/install && ln -s /root/install /mongo-go-driver/install
 
-# libmongocrypt installs into lib64 or lib depending on the platform, so
-# include both.
 ENV PKG_CONFIG=/mongo-go-driver/etc/libmongocrypt-pkg-config.sh
 ENV PKG_CONFIG_PATH=/root/install/libmongocrypt/lib64/pkgconfig:/root/install/libmongocrypt/lib/pkgconfig
 ENV LD_LIBRARY_PATH=/root/install/libmongocrypt/lib64:/root/install/libmongocrypt/lib
