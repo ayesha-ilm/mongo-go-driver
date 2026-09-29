@@ -26,8 +26,6 @@ RUN apt-get -qq update && \
 COPY etc/install-libmongocrypt.sh /root/install-libmongocrypt.sh
 RUN cd /root && bash ./install-libmongocrypt.sh
 
-# Copy the Go driver source and expose the libmongocrypt install at
-# /mongo-go-driver/install, where etc/libmongocrypt-pkg-config.sh expects it.
 COPY . /mongo-go-driver
 RUN rm -rf /mongo-go-driver/install && ln -s /root/install /mongo-go-driver/install
 
