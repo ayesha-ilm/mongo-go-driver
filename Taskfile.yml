@@ -25,6 +25,7 @@ tasks:
     cmds:
       - go mod download
       - GOTOOLCHAIN=auto go test -timeout 30m -v ./...
+  test-cse-container: bash etc/run-cse-container-test.sh
   build-awsauth-compilecheck:
     dir: internal/test/awsauth
     cmds:
