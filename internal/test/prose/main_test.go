@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -36,6 +37,10 @@ func secretsRequested() bool {
 
 func TestMain(m *testing.M) {
 	flag.Parse()
+
+	// Ryuk removes containers when the test process exits, which would defeat
+	// reusing the CSE container across runs.
+	os.Setenv("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 	if secretsRequested() {
 		path, err := exportSecrets()
@@ -202,4 +207,86 @@ type stderrLogConsumer struct{}
 
 func (stderrLogConsumer) Accept(log testcontainers.Log) {
 	fmt.Fprintln(os.Stderr, "aws-sso-login:", strings.TrimRight(string(log.Content), "\n"))
+}
+
+const (
+	CSEDockerfile    = "internal/test/docker/cse.Dockerfile"
+	cseContainerName = "mongo-go-driver-cse"
+)
+
+// StartCSE starts the CSE container, building the image from the repository
+// root only if no container named cseContainerName exists yet. The container is
+// reused across runs and keeps running so that multiple commands can be
+// executed against it with Exec. The repository root is mounted into the
+// container, so driver changes are picked up without a rebuild.
+func StartCSE(t *testing.T) testcontainers.Container {
+	t.Helper()
+
+	rootDir, err := findRepoRoot()
+	if err != nil {
+		t.Fatalf("failed to find repository root: %v", err)
+	}
+
+	req := testcontainers.ContainerRequest{
+		FromDockerfile: testcontainers.FromDockerfile{
+			Context:       rootDir,
+			Dockerfile:    CSEDockerfile,
+			PrintBuildLog: true,
+		},
+		// Block on "tail -f /dev/null" so the container stays alive and ready
+		// for exec calls, rather than immediately exiting.
+		Entrypoint: []string{"tail", "-f", "/dev/null"},
+		Name:       cseContainerName,
+		WorkingDir: "/mongo-go-driver",
+		HostConfigModifier: func(hc *container.HostConfig) {
+			hc.Binds = append(hc.Binds, rootDir+":/mongo-go-driver")
+		},
+	}
+
+	c, err := testcontainers.GenericContainer(context.Background(), testcontainers.GenericContainerRequest{
+		ContainerRequest: req,
+		Started:          true,
+		Reuse:            true,
+	})
+	if err != nil {
+		t.Fatalf("failed to start CSE container: %v", err)
+	}
+
+	return c
+}
+
+func Exec(ctx context.Context, c testcontainers.Container, cmd string) (int, string, error) {
+	exit, out, err := c.Exec(ctx, []string{"bash", "-c", cmd + " 2>&1"})
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to exec %q: %w", cmd, err)
+	}
+
+	b, err := io.ReadAll(out)
+	if err != nil {
+		return 0, "", fmt.Errorf("failed to read output of %q: %w", cmd, err)
+	}
+
+	s := string(b)
+	for len(s) > 0 && s[0] < 0x20 {
+		s = s[1:]
+	}
+	return exit, s, nil
+}
+
+// findRepoRoot walks up from wd until it finds the CSE Dockerfile.
+func findRepoRoot() (string, error) {
+	dir, err := os.Getwd()
+	if err != nil {
+		return "", err
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, CSEDockerfile)); err == nil {
+			return dir, nil
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return "", fmt.Errorf("%s not found in any parent directory", CSEDockerfile)
+		}
+		dir = parent
+	}
 }

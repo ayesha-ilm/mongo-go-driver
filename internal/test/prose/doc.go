@@ -6,5 +6,7 @@
 
 // Package prose runs prose tests that need drivers test secrets. The secrets
 // are exported by an AWS SSO login that runs in a container built from a
-// Dockerfile kept in the private 10gen/go-driver-tools repo.
+// Dockerfile kept in the private 10gen/go-driver-tools repo. The client-side
+// encryption (CSE) tests run inside a container built from
+// internal/test/docker/cse.Dockerfile.
 package prose

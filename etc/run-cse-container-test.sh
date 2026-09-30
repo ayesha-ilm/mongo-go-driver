@@ -3,7 +3,7 @@
 set -eu
 set +x
 
-echo "Running internal/test/container"
-pushd internal/test/container
-go test -timeout 30m -v ./... >>../../../test.suite
+echo "Running internal/test/prose CSE container test"
+pushd internal/test/prose
+go test -timeout 30m -v -run TestStartCSE ./... >>../../../test.suite
 popd
